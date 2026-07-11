@@ -1,0 +1,29 @@
+# Config for backup-openwrt.sh (shell KEY=VALUE syntax).
+# Copy to backup-openwrt.conf and adjust.
+
+# Whitespace-separated list of [user@]host to back up in one pass
+# (anything ssh accepts, incl. ~/.ssh/config aliases)
+HOSTS="rtr1 rtr2"
+
+# Where to store the backups; layout: BACKUP_DIR/<host>/<host>-<type>-<timestamp>.<ext>
+BACKUP_DIR="$HOME/backups/openwrt"
+
+# Backup types to run for every host (see backup_<type> functions in the script):
+#   sysupgrade    — standard config backup (sysupgrade -b)
+#   packages      — list of installed packages (opkg/apk)
+#   user-packages — packages installed by the user (list-user-packages.sh)
+#   overlay       — full copy of the writable overlay (/overlay/upper)
+# Off by default (enable explicitly; dumps contain keys and radio calibration):
+#   nor           — raw dump of all mtd partitions (NOR flash, read via cat)
+#   nand          — same for NAND (needs nand-utils on the device for nanddump)
+#   emmc          — raw dump of all eMMC partitions (gzipped on the device)
+TYPES="sysupgrade packages user-packages overlay"
+
+# Keep this many newest backups per host+type; 0 = keep everything
+KEEP=10
+
+# Extra ssh options
+SSH_OPTS="-o ConnectTimeout=10"
+
+# Options for list-user-packages.sh in the user-packages type
+USER_PACKAGES_OPTS="-m rom"
