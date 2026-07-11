@@ -1,0 +1,20 @@
+# Rewrites the IP TTL to a fixed value on all packets entering and leaving
+# the listed interfaces, so a carrier counting TTL hops cannot tell
+# tethered/routed traffic from the device's own. firewall4 picks every
+# *.nft in /etc/nftables.d up automatically; apply changes with 'fw4 reload'.
+#
+# To change the interface or TTL, or to cover more interfaces, edit the
+# rules below — one 'iifname'/'oifname' pair per interface. Interfaces not
+# listed pass through untouched. (A single 'ip ttl set iifname map { ... }'
+# rule would be nicer, but nftables does not support map expressions in
+# ttl set.)
+
+chain ttl_fix_prerouting {
+  type filter hook prerouting priority filter; policy accept;
+  iifname "wwan0" ip ttl set 64
+}
+
+chain ttl_fix_postrouting {
+  type filter hook postrouting priority filter; policy accept;
+  oifname "wwan0" ip ttl set 64
+}
