@@ -7,9 +7,11 @@
 # interface of the still-present device is removed and re-added — that
 # remove storm would stop smstools3 right after the device add started it.
 #
-#   INIT_IDS — devices that need per-model initialization (modem-init.sh)
-#   SMS_IDS  — devices whose serial port smstools3 uses: the daemon starts
-#              when such a modem appears and stops when it is removed
+#   SIMPLE_IDS — modems that work as-is, no initialization needed
+#   INIT_IDS   — modems that need per-model initialization (modem-init.sh)
+#
+# smstools3 starts when any known modem appears and stops when it is
+# removed.
 #
 # Deployed to /etc/hotplug.d/usb/ (add @keep so it survives sysupgrade).
 #
@@ -24,45 +26,69 @@
 # fire on every USB configuration change while the modem stays plugged in
 [ "${DEVTYPE:-}" = usb_device ] || exit 0
 
+SIMPLE_IDS="12d1/14db 12d1/14dc 12d1/1566 12d1/1506 19d2/1402 19d2/1403
+            19d2/1405 19d2/1244 19d2/558 1e2d/b3 1e2d/b7 2c7c/306
+            8087/95a 2cb7/7 2cb7/b e8d/7126 e8d/7127 e8d/2004 413c/81e0
+            1bc7/1070 2ecc/3012"
+
 INIT_IDS="413c/81d6 413c/81d7 19d2/1404 19d2/9994 5c6/90d5 5c6/9025
           1bc7/1900 1bc7/1901 1bc7/1910 1bc7/1911 3f0/857 3f0/a57"
 
-SMS_IDS="12d1/14db 12d1/14dc 12d1/1566 12d1/1506 19d2/1402 19d2/1403
-         19d2/1405 19d2/1244 19d2/1404 19d2/9994 19d2/558 1e2d/b3 1e2d/b7
-         2c7c/306 8087/95a 2cb7/7 2cb7/b e8d/7126 e8d/7127 413c/81e0
-         413c/81d7 5c6/90d5 5c6/9025 1bc7/1900 1bc7/1901 1bc7/1910
-         1bc7/1911 3f0/857 3f0/a57 2ecc/3012"
+log() {
+    logger -t modem-hotplug "modem ${PRODUCT:-?} ${ACTION:-?}: $*"
+}
 
-# Does $1 (PRODUCT) start with one of the vid/pid pairs in $2?
-matches() {
-    for _id in $2; do
+# Does the hotplug PRODUCT string start with one of the vid/pid pairs in $1?
+product_matches() {
+    for _id in $1; do
         # shellcheck disable=SC2254
-        case $1 in "$_id"/*) return 0 ;; esac
+        case ${PRODUCT:-} in "$_id"/*) return 0 ;; esac
     done
     return 1
 }
 
-SMS=/etc/init.d/smstools3
+is_simple_modem() {
+    product_matches "$SIMPLE_IDS"
+}
 
-sms_running() {
-    [ -x "$SMS" ] && "$SMS" status 2>/dev/null | grep -q running
+is_init_modem() {
+    product_matches "$INIT_IDS"
+}
+
+# Start/stop smstools3 ($1 = start|stop); no-op when the service is not
+# installed or already in the requested state
+manage_service() {
+    service=/etc/init.d/smstools3
+    [ -x "$service" ] || return 0
+    case $1 in
+    start)
+        if ! "$service" status 2>/dev/null | grep -q running; then
+            log "starting ${service##*/}"
+            "$service" start
+        fi
+        ;;
+    stop)
+        if "$service" status 2>/dev/null | grep -q running; then
+            log "stopping ${service##*/}"
+            "$service" stop
+        fi
+        ;;
+    esac
 }
 
 case ${ACTION:-} in
 add)
-    if matches "${PRODUCT:-}" "$INIT_IDS"; then
-        logger -t modem-hotplug "modem $PRODUCT added - running modem-init"
+    if is_simple_modem; then
+        manage_service start
+    elif is_init_modem; then
+        log "running modem-init"
         /usr/bin/modem-init.sh "$PRODUCT"
-    fi
-    if matches "${PRODUCT:-}" "$SMS_IDS" && [ -x "$SMS" ] && ! sms_running; then
-        logger -t modem-hotplug "modem $PRODUCT added - starting smstools3"
-        "$SMS" start
+        manage_service start
     fi
     ;;
 remove)
-    if matches "${PRODUCT:-}" "$SMS_IDS" && sms_running; then
-        logger -t modem-hotplug "modem $PRODUCT removed - stopping smstools3"
-        "$SMS" stop
+    if is_simple_modem || is_init_modem; then
+        manage_service stop
     fi
     ;;
 esac

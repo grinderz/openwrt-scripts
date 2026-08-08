@@ -3,15 +3,17 @@
 # (etc/hotplug.d/usb/99-modems) with the hotplug PRODUCT string as $1
 # ('vid/pid/rev', lowercase hex without leading zeros).
 #
-# Handled devices:
+# Model-specific steps:
 #   1bc7/1910 (Telit LN940): register the id with qmi_wwan and unbind the
 #     <cfg>.2-.4 interfaces from it — they are serial ports, qmi_wwan must
 #     keep only the QMI interface
 #   1bc7/1900, 413c/81d7, 413c/81d6 (DW5821e): Dell firmware exposes the
 #     usable ports only in USB configuration 1; if the device enumerated
 #     with configuration 2, switch it over
-#   5c6/9025 (Qualcomm generic): register the id with the option usb-serial
-#     driver so the modem's serial ports appear
+#
+# Every device is then registered with the option usb-serial driver so its
+# serial ports appear — that alone is the whole init for the remaining
+# INIT_IDS (19d2/1404, 19d2/9994, 5c6/90d5, 5c6/9025, ...).
 set -eu
 
 TAG=modem-init
@@ -73,23 +75,36 @@ case $USB in
 1bc7/1900/*|413c/81d7/*|413c/81d6/*)
     port=$(find_port) || die "device $VID:$PID not found in sysfs"
     cfgfile="$USBDEV/$port/bConfigurationValue"
-    grep -qi dell "$USBDEV/$port/manufacturer" 2>/dev/null || exit 0
-    [ "$(cat "$cfgfile")" = 2 ] || exit 0
-    log "dw5821e ($VID:$PID) on $port: switching usb configuration 2 -> 1"
-    # Bounded retries instead of the original infinite loop
-    tries=0
-    while [ "$(cat "$cfgfile")" != 1 ]; do
-        [ "$tries" -lt 10 ] || die "$port did not switch to configuration 1"
-        tries=$((tries + 1))
-        printf '%s\n' -1 > "$cfgfile"   # printf: echo may eat '-1' as a flag
-        printf '%s\n' 1 > "$cfgfile"
-        sleep 1
-    done
-    log "$port is in configuration 1"
-    ;;
-5c6/9025/*)
-    log "qualcomm modem ($VID:$PID): registering with the option usb-serial driver"
-    # Registering an already-known id fails with EEXIST — fine here
-    echo "$VID $PID" > /sys/bus/usb-serial/drivers/option1/new_id 2>/dev/null || :
+    if grep -qi dell "$USBDEV/$port/manufacturer" 2>/dev/null \
+        && [ "$(cat "$cfgfile")" = 2 ]; then
+        log "dw5821e ($VID:$PID) on $port: switching usb configuration 2 -> 1"
+        # The config write makes the modem re-enumerate and it can come back
+        # with a different pid (81d6 -> 81d7). The sysfs node then vanishes
+        # or changes id mid-loop: stop this run — the add event for the new
+        # pid runs this script again and finishes the init.
+        # Bounded retries instead of the original infinite loop
+        tries=0
+        while :; do
+            if [ "$(cat "$USBDEV/$port/idProduct" 2>/dev/null)" != "$PID" ]; then
+                log "$port re-enumerated with a new id - its add event takes over"
+                exit 0
+            fi
+            if [ "$(cat "$cfgfile" 2>/dev/null)" = 1 ]; then
+                break
+            fi
+            [ "$tries" -lt 10 ] || die "$port did not switch to configuration 1"
+            tries=$((tries + 1))
+            # printf: echo may eat '-1' as a flag; the writes can fail while
+            # the device re-enumerates - the next iteration handles that
+            { printf '%s\n' -1 > "$cfgfile"; } 2>/dev/null || :
+            { printf '%s\n' 1 > "$cfgfile"; } 2>/dev/null || :
+            sleep 1
+        done
+        log "$port is in configuration 1"
+    fi
     ;;
 esac
+
+log "registering $VID:$PID with the option usb-serial driver"
+# Registering an already-known id fails with EEXIST — fine here
+echo "$VID $PID" > /sys/bus/usb-serial/drivers/option1/new_id 2>/dev/null || :
