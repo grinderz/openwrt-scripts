@@ -95,6 +95,22 @@ case "$BOARD" in
         ;;
 
     # -------------------------------------------------------------------
+    # Routerich AX3000 v1 (MT7981: 2x Cortex-A53)
+    #
+    # Only two cores, so the goal is just to get the hot sources off
+    # CPU0, where everything lands by default:
+    #   CPU0 - system + SPI(NAND) + Ethernet queue #1
+    #   CPU1 - Wi-Fi (mt7915e, the hottest IRQ) + Ethernet queue #2
+    # USB is idle but pinned to CPU0 to keep it away from Wi-Fi.
+    # -------------------------------------------------------------------
+    routerich,ax3000*)
+        set_aff "mt7915e"           2        # Wi-Fi       -> CPU1
+        set_aff "15100000.ethernet" 1  1     # eth queue 1 -> CPU0
+        set_aff "15100000.ethernet" 2  2     # eth queue 2 -> CPU1
+        set_aff "xhci-hcd"          1        # USB         -> CPU0
+        ;;
+
+    # -------------------------------------------------------------------
     # Template for future devices:
     #
     # vendor,model)
