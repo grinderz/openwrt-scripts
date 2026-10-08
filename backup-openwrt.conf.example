@@ -1,5 +1,6 @@
 # Config for backup-openwrt.sh (shell KEY=VALUE syntax).
-# Copy to backup-openwrt.conf and adjust.
+# Copy to backup-openwrt.conf (-c) or to ~/.config/openwrt-scripts/backup-openwrt.conf
+# (the default; dotfiles renders it from its private toml) and adjust.
 
 # Whitespace-separated list of [user@]host to back up in one pass
 # (anything ssh accepts, incl. ~/.ssh/config aliases)

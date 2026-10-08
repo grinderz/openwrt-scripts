@@ -10,11 +10,12 @@
 #   file   — separate credentials file referenced by an 'auth-user-pass PATH'
 #            directive inside the .ovpn file
 #
-# Usage:   ./update-openvpn-password.sh [-v] [-n] [-u username] [-p password] -c config [ssh options...]
+# Usage:   ./update-openvpn-password.sh [-v] [-n] [-u username] [-p password] [-c config] [ssh options...]
 # Example: ./update-openvpn-password.sh -c update-openvpn-password.conf
 #
-#   -c file      config file (required), shell KEY=VALUE format, see
-#                update-openvpn-password.conf.example. Recognized keys:
+#   -c file      config file, shell KEY=VALUE format, see
+#                update-openvpn-password.conf.example; default when omitted:
+#                $XDG_CONFIG_HOME/openwrt-scripts/update-openvpn-password.conf. Recognized keys:
 #                  HOST      [user@]host of the device (required)
 #                  IFACE     interface name with proto 'openvpn' (required)
 #                  USERNAME  also update the username (optional)
@@ -43,7 +44,7 @@ SCRIPT_DIR=$(dirname "$0")
 . "$SCRIPT_DIR/lib.sh"
 
 usage() {
-    echo "Usage: $0 [-v] [-n] [-u username] [-p password] -c config [ssh options...]" >&2
+    echo "Usage: $0 [-v] [-n] [-u username] [-p password] [-c config] [ssh options...]" >&2
     exit 1
 }
 
@@ -66,7 +67,7 @@ shift $((OPTIND - 1))
 
 # --- config -------------------------------------------------------------------
 
-[ -n "$CONFIG" ] || { echo "ERROR: config file is required (-c FILE)" >&2; usage; }
+[ -n "$CONFIG" ] || CONFIG=$(default_config update-openvpn-password)
 
 HOST=
 IFACE=

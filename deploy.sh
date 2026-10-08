@@ -8,12 +8,13 @@
 # executable bit decides: executable -> 755, otherwise 644. Failures on one
 # host do not stop the others; a summary is printed at the end.
 #
-# Usage:   ./deploy.sh [-v] [-n] -c config [host...]
+# Usage:   ./deploy.sh [-v] [-n] [-c config] [host...]
 # Example: ./deploy.sh -c deploy.conf
 #          ./deploy.sh -c deploy.conf rtr1-gl-mt6000
 #
-#   -c file   config file (required), shell KEY=VALUE format, see
-#             deploy.conf.example. Recognized keys:
+#   -c file   config file, shell KEY=VALUE format, see
+#             deploy.conf.example; default when omitted:
+#             $XDG_CONFIG_HOME/openwrt-scripts/deploy.conf. Recognized keys:
 #               DEPLOY      host-to-files map (required); one entry per line:
 #                             <[user@]host> <file|glob>[:mode][@boot][@keep]...
 #                           patterns are shell globs relative to DEPLOY_DIR
@@ -48,7 +49,7 @@ SCRIPT_DIR=$(dirname "$0")
 . "$SCRIPT_DIR/lib.sh"
 
 usage() {
-    echo "Usage: $0 [-v] [-n] -c config [host...]" >&2
+    echo "Usage: $0 [-v] [-n] [-c config] [host...]" >&2
     exit 1
 }
 
@@ -67,7 +68,7 @@ shift $((OPTIND - 1))
 
 # --- config -------------------------------------------------------------------
 
-[ -n "$CONFIG" ] || { echo "ERROR: config file is required (-c FILE)" >&2; usage; }
+[ -n "$CONFIG" ] || CONFIG=$(default_config deploy)
 
 DEPLOY=
 DEPLOY_DIR="$SCRIPT_DIR/deploy"

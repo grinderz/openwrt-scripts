@@ -1,5 +1,6 @@
 # Config for deploy.sh (shell KEY=VALUE syntax).
-# Copy to deploy.conf and adjust.
+# Copy to deploy.conf (-c) or to ~/.config/openwrt-scripts/deploy.conf
+# (the default; dotfiles renders it from its private toml) and adjust.
 
 # Local directory with the files to deploy
 # (default: deploy/ next to the script)

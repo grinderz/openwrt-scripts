@@ -34,12 +34,13 @@
 #                   reference. Restore one partition:
 #                   gzip -dc mmcblk0p4-crash.bin.gz | ssh host "cat > /dev/mmcblk0p4"
 #
-# Usage:   ./backup-openwrt.sh [-v] [-t types] -c config [host...]
+# Usage:   ./backup-openwrt.sh [-v] [-t types] [-c config] [host...]
 # Example: ./backup-openwrt.sh -c backup-openwrt.conf
 #          ./backup-openwrt.sh -c backup-openwrt.conf rtr1-gl-mt6000
 #
-#   -c file   config file (required), shell KEY=VALUE format, see
-#             backup-openwrt.conf.example. Recognized keys:
+#   -c file   config file, shell KEY=VALUE format, see
+#             backup-openwrt.conf.example; default when omitted:
+#             $XDG_CONFIG_HOME/openwrt-scripts/backup-openwrt.conf. Recognized keys:
 #               HOSTS       whitespace-separated [user@]host list (required)
 #               BACKUP_DIR  where to store backups (required); layout:
 #                           BACKUP_DIR/<host>/<host>-<type>-<timestamp>.<ext>
@@ -66,7 +67,7 @@ SCRIPT_DIR=$(dirname "$0")
 . "$SCRIPT_DIR/lib.sh"
 
 usage() {
-    echo "Usage: $0 [-v] [-t types] -c config [host...]" >&2
+    echo "Usage: $0 [-v] [-t types] [-c config] [host...]" >&2
     exit 1
 }
 
@@ -85,7 +86,7 @@ shift $((OPTIND - 1))
 
 # --- config -------------------------------------------------------------------
 
-[ -n "$CONFIG" ] || { echo "ERROR: config file is required (-c FILE)" >&2; usage; }
+[ -n "$CONFIG" ] || CONFIG=$(default_config backup-openwrt)
 
 HOSTS=
 BACKUP_DIR=

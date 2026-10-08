@@ -8,8 +8,10 @@ to the routers through plain `ssh`.
 Common conventions:
 
 - Scripts that take a config use plain shell `KEY=VALUE` files; a commented
-  `*.conf.example` ships next to each script. Real `*.conf` files are
-  git-ignored.
+  `*.conf.example` ships next to each script. Without `-c` a script reads
+  `~/.config/openwrt-scripts/<script>.conf` (`$XDG_CONFIG_HOME` honoured);
+  the dotfiles repo renders those from one router inventory. Real `*.conf`
+  files in the repo are git-ignored.
 - Hosts are anything ssh accepts, including `~/.ssh/config` aliases and
   `user@host`.
 - `-v` on any script prints verbose diagnostics to stderr.

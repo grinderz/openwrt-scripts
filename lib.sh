@@ -15,6 +15,13 @@ die() {
     exit 1
 }
 
+# Default config of a script when -c is not given:
+# $XDG_CONFIG_HOME/openwrt-scripts/<name>.conf (dotfiles renders these from
+# the router inventory in its private toml); $1 = name without .conf
+default_config() {
+    echo "${XDG_CONFIG_HOME:-$HOME/.config}/openwrt-scripts/$1.conf"
+}
+
 # Check that a config file exists and source it; $1 = path
 load_config() {
     [ -f "$1" ] || die "config file '$1' not found"
