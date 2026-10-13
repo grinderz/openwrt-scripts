@@ -123,8 +123,8 @@ USER_B64=
 # prepended to the script and both travel over stdin, so no secret ever
 # becomes a command-line argument.
 {
-    printf "VERBOSE='%s' DRYRUN='%s' IFACE='%s' WAIT='%s'\n" \
-        "$VERBOSE" "$DRYRUN" "$IFACE" "$WAIT"
+    printf "VERBOSE='%s' DRYRUN='%s' HOST='%s' IFACE='%s' WAIT='%s'\n" \
+        "$VERBOSE" "$DRYRUN" "$HOST" "$IFACE" "$WAIT"
     printf "PW_B64='%s' USER_B64='%s'\n" "$PW_B64" "$USER_B64"
     cat <<'REMOTE'
 set -eu
@@ -171,6 +171,8 @@ fi
 vlog "credentials location: $mode${ovpn:+ (config: $ovpn)}${auth_file:+ -> $auth_file}"
 
 if [ "$DRYRUN" = 1 ]; then
+    # HOST is the name from the config, uname -n is what the device calls itself
+    echo "dry run: $HOST ($(uname -n)), interface '$IFACE', credentials: $mode"
     case $mode in
         uci)    echo "dry run [$mode]: would set network.$IFACE.password (${#pw} chars)" ;;
         inline) echo "dry run [$mode]: would replace password inside <auth-user-pass> block of $ovpn (${#pw} chars)" ;;
