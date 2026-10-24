@@ -1,0 +1,64 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Renovate on GitHub keeps the tooling pins: workflow actions, pre-commit hook revs, the pre-commit version of the Makefile and the shellcheck release of the CI workflow. The scripts themselves have no dependencies."
+  ],
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "Europe/Istanbul",
+  "schedule": [
+    "before 9am on saturday"
+  ],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 5,
+  "semanticCommitType": "chore",
+  "enabledManagers": [
+    "github-actions",
+    "pre-commit",
+    "custom.regex"
+  ],
+  "pre-commit": {
+    "enabled": true
+  },
+  "branchPrefix": "renovate/",
+  "labels": [
+    "dependencies"
+  ],
+  "packageRules": [
+    {
+      "description": "pre-commit hooks in their own PR",
+      "matchManagers": [
+        "pre-commit"
+      ],
+      "groupName": "pre-commit hooks"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "pre-commit, run through uvx at the version of the Makefile",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "PRE_COMMIT_VERSION \\?= (?<currentValue>\\S+)"
+      ],
+      "depNameTemplate": "pre-commit",
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "shellcheck release installed by the CI lint job",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "SHELLCHECK_VERSION: (?<currentValue>\\S+)"
+      ],
+      "depNameTemplate": "koalaman/shellcheck",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    }
+  ]
+}

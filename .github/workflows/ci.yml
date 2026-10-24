@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # go (gitleaks hook) comes with the ubuntu runner, uvx runs pre-commit.
+  # shellcheck is pinned instead of the runner's package: the findings differ
+  # between releases (0.9 flags '[ a ] && [ b ] || continue' as SC2015, 0.11
+  # does not), the pin keeps CI and the workstations on the same ruleset
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      SHELLCHECK_VERSION: 0.11.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+
+      - name: install shellcheck
+        run: |
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | sudo tar -xJ --strip-components=1 -C /usr/local/bin "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          shellcheck --version
+
+      - name: shellcheck
+        run: make lint.shellcheck
+
+      - name: pre-commit
+        run: make lint.pre-commit
+
+  # dry-run paths of the scripts against generated configs: no ssh, no device
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: smoke
+        run: make test

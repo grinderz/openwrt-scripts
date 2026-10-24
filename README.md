@@ -15,6 +15,9 @@ Common conventions:
 - Hosts are anything ssh accepts, including `~/.ssh/config` aliases and
   `user@host`.
 - `-v` on any script prints verbose diagnostics to stderr.
+- `-n` on any workstation script that changes something (`backup-openwrt.sh`,
+  `deploy.sh`, `update-openvpn-password.sh`, `unpack-firmware.sh`) is a dry
+  run: it prints what would be done and changes nothing.
 - `lib.sh` holds shared helpers (`vlog`, `die`, config loading) — it is
   sourced by the other scripts, not run directly.
 
@@ -41,6 +44,7 @@ The raw dump types are off by default because the images contain secrets
 
 ```sh
 cp backup-openwrt.conf.example backup-openwrt.conf   # edit HOSTS, BACKUP_DIR, TYPES
+./backup-openwrt.sh -n -c backup-openwrt.conf        # dry run: what would be written/pruned
 ./backup-openwrt.sh -c backup-openwrt.conf           # back up everything
 ./backup-openwrt.sh -c backup-openwrt.conf rtr1      # only this host
 ./backup-openwrt.sh -v -t "sysupgrade emmc" -c backup-openwrt.conf rtr1
@@ -159,4 +163,14 @@ offset with `binwalk`, carves it out with `dd` and unpacks it with
 ```sh
 ./unpack-firmware.sh openwrt-24.10.2-ath79-generic-tl-wdr4300-v1-squashfs-sysupgrade.bin
 # -> ./<image-name>-root/ with the unpacked root fs
+./unpack-firmware.sh -n image.bin      # dry run: only report the SquashFS offset and target dir
 ```
+
+## Development
+
+`make lint` runs shellcheck over every script (POSIX sh dialect, the config
+examples included) and the pre-commit hooks via `uvx pre-commit`;
+`make test` runs `tests/smoke.sh`: the dry-run paths of the scripts against
+generated configs, no ssh and no device needed. CI
+(`.github/workflows/ci.yml`) runs the same two targets on every push and
+pull request; Renovate keeps the action and hook pins current.
