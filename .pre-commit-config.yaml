@@ -1,0 +1,35 @@
+# pre-commit hooks (no branch guard: this repo commits to main).
+# Run: make lint.pre-commit
+exclude: '^\.git/'
+fail_fast: true
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+      - id: check-merge-conflict
+        args: ['--assume-in-merge']
+      # device files under deploy/etc are copied verbatim: the hotplug hooks
+      # are sourced by hotplug-call, shebang and mode do not matter there
+      - id: check-shebang-scripts-are-executable
+        exclude: '^deploy/etc/'
+      - id: check-executables-have-shebangs
+        exclude: '^deploy/etc/'
+      - id: check-symlinks
+      - id: mixed-line-ending
+        args: ['--fix=no']
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: trailing-whitespace
+        args: ['--markdown-linebreak-ext=md']
+      - id: forbid-new-submodules
+
+  # secrets: the scripts handle VPN passwords, a pasted one must never reach
+  # the history
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

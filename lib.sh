@@ -25,6 +25,12 @@ default_config() {
 # Check that a config file exists and source it; $1 = path
 load_config() {
     [ -f "$1" ] || die "config file '$1' not found"
+    # '.' looks a bare file name up in PATH, not in the cwd (bash in POSIX
+    # mode has no cwd fallback): anchor it
+    case $1 in
+        */*) ;;
+        *)   set -- "./$1" ;;
+    esac
     # shellcheck disable=SC1090
     . "$1"
 }
