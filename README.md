@@ -16,8 +16,8 @@ Common conventions:
   `user@host`.
 - `-v` on any script prints verbose diagnostics to stderr.
 - `-n` on any workstation script that changes something (`backup-openwrt.sh`,
-  `deploy.sh`, `update-openvpn-password.sh`, `unpack-firmware.sh`) is a dry
-  run: it prints what would be done and changes nothing.
+  `update-openvpn-password.sh`, `unpack-firmware.sh`) is a dry run: it
+  prints what would be done and changes nothing.
 - `lib.sh` holds shared helpers (`vlog`, `die`, config loading) — it is
   sourced by the other scripts, not run directly.
 
@@ -52,57 +52,13 @@ cp backup-openwrt.conf.example backup-openwrt.conf   # edit HOSTS, BACKUP_DIR, T
 
 Backups land in `BACKUP_DIR/<host>/<host>-<type>-<timestamp>.<ext>`.
 
-## deploy.sh
+## Device files
 
-Deploys files from a local `deploy/` directory to the devices. Which files
-go to which host is defined by the `DEPLOY` map in the config. Files stream
-through ssh (no scp/sftp server needed on the device), land atomically and
-are skipped when the remote copy is already identical (md5 match).
-
-```sh
-cp deploy.conf.example deploy.conf                   # edit the DEPLOY map
-./deploy.sh -n -c deploy.conf                        # dry run: show the plan
-./deploy.sh -c deploy.conf                           # deploy everything
-./deploy.sh -c deploy.conf rtr1-gl-mt6000            # only this host
-```
-
-The map is one line per host:
-`<[user@]host> <file|glob>[:mode][@boot][@keep]...`, with globs relative
-to `DEPLOY_DIR`, an optional octal mode per pattern and optional
-`@boot`/`@keep` flags:
-
-```sh
-DEPLOY="
-rtr1-gl-mt6000  setup-clash-cache.sh@boot@keep patch-fw4-offload.sh@boot@keep
-rtr2            *                # everything from DEPLOY_DIR
-root@10.0.0.3   patch-fw4-offload.sh@boot@keep etc/config/*:600
-"
-```
-
-Without `:mode` the local executable bit decides: executable → 755,
-otherwise 644. A mode change alone (same content) is applied via chmod
-without re-uploading. `@boot` registers the deployed file in
-`/etc/rc.local` so it runs at boot (inserted once before the final
-`exit 0`; re-deploys do not duplicate the line). `@keep` adds it to
-`/etc/sysupgrade.conf` so it is included in sysupgrade backups and
-survives firmware upgrades — for `@boot` scripts outside `/etc` you
-usually want `@boot@keep`, otherwise the rc.local entry survives the
-upgrade but the script does not. Top-level files go to `DEST_DIR`
-(default `/usr/bin`); files in subdirectories mirror the device root fs
-instead: `deploy/etc/config/foo` → `/etc/config/foo`.
-
-Device-side scripts shipped in `deploy/`:
-
-| File | Purpose |
-|---|---|
-| `setup-clash-cache.sh` | keep the clash cache.db on tmpfs (symlink into /tmp) to spare the flash |
-| `patch-fw4-offload.sh` | patch firewall4 so flow offload starts only after 30 packets |
-| `patch-3ginfo.sh` | patch 3ginfo-lite to strip all control chars from modem responses |
-| `modem-reset.sh` | hard-reset the modem via its reset GPIO (stops smstools3 first) |
-| `modem-init.sh` | per-model USB modem init (qmi_wwan binding, Dell USB config, option ids) |
-| `etc/hotplug.d/iface/99-clash-modem.sh` | (re)start clash once the modem interface has real connectivity |
-| `etc/hotplug.d/usb/99-modems` | on modem add/remove: run modem-init, start/stop smstools3 |
-| `etc/hotplug.d/net/30-irq-affinity` | per-board IRQ affinity profiles (one hot IRQ source per core) |
+What used to be deployed from here (`deploy.sh`, the `deploy/` tree with
+the patches, hotplug hooks, modem scripts, sysctl and the adblock feed list)
+lives in the dotfiles repo now: `infra/files/openwrt/`, shipped by the
+pyinfra deploys `openwrt-files` and `openwrt-adblock` from the same router
+inventory that renders the configs of these scripts.
 
 ## list-user-packages.sh
 

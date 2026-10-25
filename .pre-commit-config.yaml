@@ -12,12 +12,8 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
         args: ['--assume-in-merge']
-      # device files under deploy/etc are copied verbatim: the hotplug hooks
-      # are sourced by hotplug-call, shebang and mode do not matter there
       - id: check-shebang-scripts-are-executable
-        exclude: '^deploy/etc/'
       - id: check-executables-have-shebangs
-        exclude: '^deploy/etc/'
       - id: check-symlinks
       - id: mixed-line-ending
         args: ['--fix=no']

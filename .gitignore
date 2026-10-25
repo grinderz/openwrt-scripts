@@ -1,3 +1,2 @@
 *.conf
 .idea/
-!deploy/etc/**/*.conf

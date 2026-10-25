@@ -7,9 +7,8 @@ SHELL := bash
 PRE_COMMIT_VERSION ?= 4.7.0
 PRE_COMMIT ?= uvx pre-commit@$(PRE_COMMIT_VERSION)
 
-# every script is POSIX sh (#!/bin/sh, or sourced by hotplug-call on the
-# device), so the dialect is forced: the hotplug hooks carry no shebang
-SHELL_SCRIPTS := $(wildcard *.sh deploy/*.sh deploy/etc/hotplug.d/*/* tests/*.sh)
+# every script is POSIX sh (#!/bin/sh), so the dialect is forced
+SHELL_SCRIPTS := $(wildcard *.sh tests/*.sh)
 # the config examples are shell too; their variables are read by the
 # scripts that source them, hence SC2034 (unused) is off for them
 CONF_EXAMPLES := $(wildcard *.conf.example)

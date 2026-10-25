@@ -22,25 +22,6 @@ expect_count() {
 $(cat "$1")"
 }
 
-echo "== deploy.sh -n"
-cat > "$TMP/deploy.conf" <<CONF
-DEPLOY="
-rtr1        *@boot@keep etc/hotplug.d/*/*
-root@rtr2   patch-fw4-offload.sh:700 etc/sysctl.d/*   # mode override, root fs mirror
-"
-CONF
-# run with a bare relative config name: '.' must source it from the cwd
-(cd "$TMP" && "$ROOT/deploy.sh" -n -c deploy.conf) > "$TMP/deploy.out" || fail "deploy.sh -n exited $?"
-expect_count "$TMP/deploy.out" 1 '^would deploy: rtr1 .*/setup-clash-cache.sh -> /usr/bin/setup-clash-cache.sh (mode 755, startup, keep)$'
-expect_count "$TMP/deploy.out" 1 '^would deploy: rtr1 .*/etc/hotplug.d/usb/99-modems -> /etc/hotplug.d/usb/99-modems (mode 644)$'
-expect_count "$TMP/deploy.out" 1 '^would deploy: root@rtr2 .*/patch-fw4-offload.sh -> /usr/bin/patch-fw4-offload.sh (mode 700)$'
-expect_count "$TMP/deploy.out" 1 '^would deploy: root@rtr2 .*/etc/sysctl.d/12-tcp-tuning.conf -> /etc/sysctl.d/12-tcp-tuning.conf (mode 644)$'
-expect_count "$TMP/deploy.out" 0 'OK:'
-# a pattern without a match is a config error for that host
-echo 'DEPLOY="rtr1 no-such-file*"' > "$TMP/deploy-bad.conf"
-"$ROOT/deploy.sh" -n -c "$TMP/deploy-bad.conf" >/dev/null 2>&1 && fail "deploy.sh -n accepted an unmatched pattern"
-"$ROOT/deploy.sh" -n -c "$TMP/deploy.conf" nope >/dev/null 2>&1 && fail "deploy.sh -n accepted a host missing from the map"
-
 echo "== backup-openwrt.sh -n"
 mkdir -p "$TMP/bk/rtr1"
 for t in 20250101-000000 20250201-000000 20250301-000000; do
@@ -61,6 +42,6 @@ expect_count "$TMP/backup.out" 1 '^would prune: .*/rtr1-sysupgrade-20250201-0000
 echo "== usage errors"
 "$ROOT/unpack-firmware.sh" -n >/dev/null 2>&1 && fail "unpack-firmware.sh -n ran without an image"
 "$ROOT/list-user-packages.sh" >/dev/null 2>&1 && fail "list-user-packages.sh ran without -m"
-"$ROOT/deploy.sh" -c "$TMP/does-not-exist.conf" >/dev/null 2>&1 && fail "deploy.sh ran with a missing config"
+"$ROOT/backup-openwrt.sh" -c "$TMP/does-not-exist.conf" >/dev/null 2>&1 && fail "backup-openwrt.sh ran with a missing config"
 
 echo "OK"
