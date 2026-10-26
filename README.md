@@ -71,7 +71,7 @@ flashed image. Works with both opkg and apk firmwares. Comparison modes
 | `rom` | diff against the package database in `/rom` (squashfs images) |
 | `time` | `Installed-Time` heuristic — packages newer than the firmware build time (opkg only) |
 | `rom-manifest` | packages baked into a custom image on top of the default set (`/rom` vs the official image manifest) |
-| `time+rom-manifest` | union of the two: installed after flashing plus baked into the image |
+| `time+rom-manifest` | union of the two: installed after flashing plus baked into the image (apk: the `/rom` diff stands in for `time`) |
 
 Useful options: `-f top` keeps only packages nothing else depends on (what
 was installed by hand); `-u` drops packages listed in the official image

@@ -17,7 +17,8 @@
 #                        on top of the default package set (implies -u)
 #                time+rom-manifest — union of time and rom-manifest: what
 #                        changed after flashing plus what was baked into the
-#                        image (implies -u)
+#                        image (implies -u); apk keeps no install time, so
+#                        there the diff against /rom stands in for time
 #   -u         exclude packages listed in the image manifest (works in all
 #              modes). In time mode this hides stock packages manually
 #              updated via opkg upgrade: they have a fresh Installed-Time
@@ -28,8 +29,9 @@
 #              (extra ssh probe for release/target), then on the device as
 #              a fallback (use -b for custom builds). The downloaded manifest
 #              is augmented with the device profile's default packages from
-#              profiles.json (device_packages); if the profile cannot be
-#              found there, the manifest alone is used (logged with -v)
+#              profiles.json (device_packages of the profile whose
+#              supported_devices lists the board name); if no profile
+#              matches, the manifest alone is used (logged with -v)
 #   -b file    local file with the manifest package list — a manifest from
 #              downloads.openwrt.org or just one name per line (first field
 #              is used); implies -u
@@ -99,7 +101,7 @@ if [ "$UPGRADED" = 1 ] && [ -z "$BASEFILE" ]; then
     INFO=$(ssh -n "$@" "$HOST" '. /etc/openwrt_release 2>/dev/null; echo "${DISTRIB_RELEASE:-} ${DISTRIB_TARGET:-}"; ubus call system board 2>/dev/null | jsonfilter -e "@.board_name" 2>/dev/null || true' 2>/dev/null) || INFO=
     REL=$(echo "$INFO" | sed -n '1s/ .*//p')
     TGT=$(echo "$INFO" | sed -n '1s/^[^ ]* //p')
-    PROFILE=$(echo "$INFO" | sed -n '2p' | tr ',' '_')
+    BOARD=$(echo "$INFO" | sed -n '2p')
     if [ -n "$REL" ] && [ -n "$TGT" ]; then
         TGT_DASH=$(echo "$TGT" | tr '/' '-')
         if [ "$REL" = "SNAPSHOT" ]; then
@@ -113,30 +115,41 @@ if [ "$UPGRADED" = 1 ] && [ -z "$BASEFILE" ]; then
             # Augment the manifest with the device profile's default packages
             # from profiles.json. An entry with a leading '-' means the package
             # is excluded from this device's default set — subtract it.
+            # The profile key is not the board name (rpi-3 serves
+            # raspberrypi,3-model-b and others), so the profile is the one
+            # whose supported_devices lists the board. Keys are sorted, so
+            # device_packages opens each profile and its supported_devices
+            # follows before the next profile's device_packages. The same
+            # lookup runs on the device in baseline_names.
             PURL="${URL%/*}/profiles.json"
             DEVPKGS=
-            if [ -n "$PROFILE" ]; then
+            if [ -n "$BOARD" ]; then
                 DEVPKGS=$(curl -fsS "$PURL" 2>/dev/null || wget -qO- "$PURL" 2>/dev/null || true)
-                # device_packages is the first key in each profile object,
-                # so the first match after the profile key belongs to it
-                DEVPKGS=$(printf '%s' "$DEVPKGS" | awk -v prof="$PROFILE" '
+                DEVPKGS=$(printf '%s' "$DEVPKGS" | tr -d '\n' | awk -v board="$BOARD" '
                     {
-                        i = index($0, "\"" prof "\":")
-                        if (!i) exit
-                        s = substr($0, i)
-                        j = index(s, "\"device_packages\":[")
-                        if (!j) exit
-                        s = substr(s, j + 19)
-                        s = substr(s, 1, index(s, "]") - 1)
-                        gsub(/[" ]/, "", s)
-                        n = split(s, a, ",")
-                        for (x = 1; x <= n; x++) if (a[x] != "") print a[x]
+                        key = "\"device_packages\":["
+                        s = $0
+                        while ((i = index(s, key)) > 0) {
+                            s = substr(s, i + length(key))
+                            nxt = index(s, key)
+                            chunk = nxt ? substr(s, 1, nxt - 1) : s
+                            j = index(chunk, "\"supported_devices\":[")
+                            if (!j) continue
+                            sd = substr(chunk, j)
+                            sd = substr(sd, 1, index(sd, "]"))
+                            if (!index(sd, "\"" board "\"")) continue
+                            pk = substr(chunk, 1, index(chunk, "]") - 1)
+                            gsub(/[" ]/, "", pk)
+                            n = split(pk, a, ",")
+                            for (x = 1; x <= n; x++) if (a[x] != "") print a[x]
+                            exit
+                        }
                     }')
             fi
             if [ -n "$DEVPKGS" ]; then
-                [ "$VERBOSE" = 1 ] && echo "# baseline: adding device profile packages ($PROFILE): $(echo "$DEVPKGS" | tr '\n' ' ')" >&2
+                [ "$VERBOSE" = 1 ] && echo "# baseline: adding device profile packages ($BOARD): $(echo "$DEVPKGS" | tr '\n' ' ')" >&2
             else
-                [ "$VERBOSE" = 1 ] && echo "# baseline: device profile packages unavailable ($PROFILE), using manifest only" >&2
+                [ "$VERBOSE" = 1 ] && echo "# baseline: device profile packages unavailable ($BOARD), using manifest only" >&2
             fi
             BASELINE=$(printf '%s\n%s\n' "$MANIFEST" "$DEVPKGS" | awk '
                 $1 == "" { next }
@@ -162,6 +175,8 @@ set -eu
 
 STATUS=/usr/lib/opkg/status
 ROM_STATUS=/rom/usr/lib/opkg/status
+APK_DB=/lib/apk/db/installed
+ROM_APK_DB=/rom/lib/apk/db/installed
 
 vlog() {
     if [ "${VERBOSE:-0}" = 1 ]; then
@@ -212,17 +227,38 @@ baseline_names() {
         wget -qO /tmp/.pkgs_manifest "$url" \
             || die "-u: manifest download failed: $url (no internet or https support on device? use -b FILE)"
         # Augment with the device profile's default packages from
-        # profiles.json; a leading '-' excludes the package from the set
-        profile=$(ubus call system board 2>/dev/null | jsonfilter -e '@.board_name' 2>/dev/null | tr ',' '_')
+        # profiles.json; a leading '-' excludes the package from the set.
+        # The profile is found by its supported_devices, the same lookup as
+        # on the client (jsonfilter cannot match an array element)
+        board=$(ubus call system board 2>/dev/null | jsonfilter -e '@.board_name' 2>/dev/null || true)
         devpkgs=
-        if [ -n "$profile" ] && wget -qO /tmp/.profiles_json "${url%/*}/profiles.json" 2>/dev/null; then
-            devpkgs=$(jsonfilter -i /tmp/.profiles_json -e "@.profiles['$profile'].device_packages[*]" 2>/dev/null || true)
+        if [ -n "$board" ] && wget -qO /tmp/.profiles_json "${url%/*}/profiles.json" 2>/dev/null; then
+            devpkgs=$(tr -d '\n' < /tmp/.profiles_json | awk -v board="$board" '
+                {
+                    key = "\"device_packages\":["
+                    s = $0
+                    while ((i = index(s, key)) > 0) {
+                        s = substr(s, i + length(key))
+                        nxt = index(s, key)
+                        chunk = nxt ? substr(s, 1, nxt - 1) : s
+                        j = index(chunk, "\"supported_devices\":[")
+                        if (!j) continue
+                        sd = substr(chunk, j)
+                        sd = substr(sd, 1, index(sd, "]"))
+                        if (!index(sd, "\"" board "\"")) continue
+                        pk = substr(chunk, 1, index(chunk, "]") - 1)
+                        gsub(/[" ]/, "", pk)
+                        n = split(pk, a, ",")
+                        for (x = 1; x <= n; x++) if (a[x] != "") print a[x]
+                        exit
+                    }
+                }')
         fi
         rm -f /tmp/.profiles_json
         if [ -n "$devpkgs" ]; then
-            vlog "baseline: adding device profile packages ($profile): $(echo "$devpkgs" | tr '\n' ' ')"
+            vlog "baseline: adding device profile packages ($board): $(echo "$devpkgs" | tr '\n' ' ')"
         else
-            vlog "baseline: device profile packages unavailable ($profile), using manifest only"
+            vlog "baseline: device profile packages unavailable ($board), using manifest only"
         fi
         { awk '{print $1}' /tmp/.pkgs_manifest; printf '%s\n' "$devpkgs"; } | awk '
             $1 == "" { next }
@@ -272,7 +308,7 @@ filter_installed_apk() {
         return
     fi
     vlog "filter: -i — dropping packages not currently installed"
-    apk list --installed 2>/dev/null | cut -d' ' -f1 | sort > /tmp/.pkgs_inst
+    apk_names "$APK_DB" > /tmp/.pkgs_inst
     awk 'NR==FNR{inst[$0];next} $0 in inst' /tmp/.pkgs_inst -
     rm -f /tmp/.pkgs_inst
 }
@@ -316,14 +352,21 @@ filter_top_apk() {
 
 # --- comparison methods -------------------------------------------------------
 
+# Bare package names from an apk database ($APK_DB or $ROM_APK_DB). `apk list`
+# prints name-version, which matches neither the manifest nor
+# `apk info --rdepends`; the P: lines of the database carry the name alone
+apk_names() {
+    awk '/^P:/ {print substr($0, 3)}' "$1" | sort
+}
+
 apk_rom() {
-    [ -d /rom/lib/apk ] || die "mode 'rom' requires /rom apk database (squashfs image)"
+    [ -f "$ROM_APK_DB" ] || die "mode 'rom' requires $ROM_APK_DB (squashfs image)"
     vlog "method: apk, diff against /rom image database"
     prepare_baseline
-    apk list --installed --root /rom 2>/dev/null | cut -d' ' -f1 | sort > /tmp/.pkgs_rom
+    apk_names "$ROM_APK_DB" > /tmp/.pkgs_rom
     vlog "packages in rom image: $(wc -l < /tmp/.pkgs_rom)"
-    vlog "packages installed now: $(apk list --installed 2>/dev/null | wc -l)"
-    apk list --installed 2>/dev/null | cut -d' ' -f1 | sort \
+    vlog "packages installed now: $(grep -c '^P:' "$APK_DB")"
+    apk_names "$APK_DB" \
         | awk 'NR==FNR{rom[$0];next} !($0 in rom)' /tmp/.pkgs_rom - \
         | filter_upgraded \
         | filter_top_apk \
@@ -347,11 +390,11 @@ opkg_rom() {
 # Packages baked into the /rom image on top of the default package set:
 # everything in /rom that the image manifest does not list
 apk_rom_manifest() {
-    [ -d /rom/lib/apk ] || die "mode 'rom-manifest' requires /rom apk database (squashfs image)"
+    [ -f "$ROM_APK_DB" ] || die "mode 'rom-manifest' requires $ROM_APK_DB (squashfs image)"
     vlog "method: apk, /rom packages absent from manifest"
     prepare_baseline
-    vlog "packages in rom image: $(apk list --installed --root /rom 2>/dev/null | wc -l)"
-    apk list --installed --root /rom 2>/dev/null | cut -d' ' -f1 | sort \
+    vlog "packages in rom image: $(grep -c '^P:' "$ROM_APK_DB")"
+    apk_names "$ROM_APK_DB" \
         | filter_upgraded | filter_installed_apk | filter_top_apk | report
     rm -f "$BASE_LIST"
 }
@@ -409,6 +452,21 @@ opkg_time_rom_manifest() {
     rm -f "$BASE_LIST"
 }
 
+# Union of the /rom diff and rom-manifest. apk records no install time, and
+# on a squashfs image what was installed after flashing is exactly what the
+# /rom database lacks, so the diff takes the place of time. With the manifest
+# filter (implied) the union is (installed + /rom) minus the manifest
+apk_time_rom_manifest() {
+    [ -f "$ROM_APK_DB" ] || die "mode 'time+rom-manifest' requires $ROM_APK_DB (squashfs image)"
+    vlog "method: apk, union of /rom diff (in place of time) and rom-manifest"
+    vlog "packages in rom image: $(grep -c '^P:' "$ROM_APK_DB")"
+    vlog "packages installed now: $(grep -c '^P:' "$APK_DB")"
+    prepare_baseline
+    { apk_names "$APK_DB"; apk_names "$ROM_APK_DB"; } | sort -u \
+        | filter_upgraded | filter_installed_apk | filter_top_apk | report
+    rm -f "$BASE_LIST"
+}
+
 # --- package manager and mode selection ---------------------------------------
 
 vlog "host: $(cat /etc/board.json 2>/dev/null | grep -o '"id":[^,]*' | head -1 || uname -n)"
@@ -418,9 +476,10 @@ vlog "requested mode: $MODE, filter: ${FILTER:-all}, upgraded-filter: ${UPGRADED
 # OpenWrt >= 24.10 may use apk instead of opkg
 if command -v apk >/dev/null 2>&1 && [ ! -x /bin/opkg ]; then
     case "$MODE" in
-        (time|time+rom-manifest) die "mode '$MODE' is not supported with apk (no Installed-Time field)" ;;
+        (time)   die "mode 'time' is not supported with apk (no install time recorded)" ;;
         (rom)    apk_rom ;;
         (rom-manifest) apk_rom_manifest ;;
+        (time+rom-manifest) apk_time_rom_manifest ;;
     esac
     exit 0
 fi
