@@ -4,15 +4,18 @@
     "Renovate on GitHub keeps the tooling pins: workflow actions, pre-commit hook revs, the pre-commit version of the Makefile and the shellcheck release of the CI workflow. The scripts themselves have no dependencies."
   ],
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":semanticCommitTypeAll(chore)"
   ],
   "timezone": "Europe/Istanbul",
   "schedule": [
-    "before 9am on saturday"
+    "every weekend"
   ],
-  "dependencyDashboard": true,
   "prConcurrentLimit": 5,
-  "semanticCommitType": "chore",
+  "semanticCommits": "enabled",
+  "baseBranchPatterns": [
+    "main"
+  ],
   "enabledManagers": [
     "github-actions",
     "pre-commit",
